@@ -1,27 +1,27 @@
 /*
- * XIAO ARCADE  -  Seeed XIAO ESP32S3 (Sense) + Seeed Round Display (dokunmatik)
+ * XIAO ARCADE  -  Seeed XIAO ESP32S3 (Sense) + Seeed Round Display (touch)
  * -------------------------------------------------------------------------
- *  Uygulamalar (ana menuden dokunarak secilir):
- *   1) ORBIT GUARD : Gezegeni meteorlardan koru. Ekranin neresine dokunursan
- *                    kalkan o yone doner. Yesil kalpleri ICERI birak (+can),
- *                    altin yildizlari yakala (+puan, genis kalkan).
- *   2) CIZIM       : Dokunmatik testi / parmakla resim. Kenardaki halkadan renk
- *                    sec, ustteki "C" temizler, alttaki "X" menuye doner.
- *   3) FOTO        : Internetten indirilen fotolar, karusel. Saga/sola kaydir,
- *                    dokun = otomatik slayt, asagi cek = menu. (PSRAM + WiFi)
- *   4) SAAT        : WiFi + NTP ile analog/dijital saat. Dokun -> menu.
+ *  Apps (tap to select from the main menu):
+ *   1) ORBIT GUARD : Protect the planet from meteors. Wherever you touch the
+ *                    screen, the shield turns that way. Let green hearts IN
+ *                    (+life), catch gold stars (+points, wide shield).
+ *   2) PAINT       : Touch test / finger painting. Pick a colour from the rim,
+ *                    "C" at the top clears, "X" at the bottom returns to menu.
+ *   3) PHOTO       : Photos downloaded from the internet, carousel. Swipe
+ *                    left/right, tap = slideshow, pull down = menu. (PSRAM + WiFi)
+ *   4) CLOCK       : Analog/digital clock via WiFi + NTP. Tap -> menu.
  *
- *  WiFi baglaninca: http://xiao-arcade.local (veya IP) adresinde web paneli:
- *   - rekor / istatistikler
- *   - telefondan ekrana mesaj gonderme
+ *  Once WiFi is connected, a web panel runs at http://xiao-arcade.local (or IP):
+ *   - high score / statistics
+ *   - send a message from your phone to the screen
  *
- *  Kutuphane: Seeed_GFX (TFT_eSPI tabanli). driver.h icinde BOARD_SCREEN_COMBO 501.
+ *  Library: Seeed_GFX (based on TFT_eSPI). driver.h sets BOARD_SCREEN_COMBO 501.
  */
 #include "driver.h"
 #include "config.h"
 
 #include <Arduino.h>
-// Not: WebServer, TFT_eSPI'dan ONCE gelmeli (Seeed_GFX FS_NO_GLOBALS tanimliyor)
+// Note: WebServer must come BEFORE TFT_eSPI (Seeed_GFX defines FS_NO_GLOBALS)
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -40,7 +40,7 @@
 #define TOUCH_I2C_ADDR 0x2E
 
 // ---------------------------------------------------------------------------
-// Genel
+// General
 // ---------------------------------------------------------------------------
 static const int16_t W = 240, H = 240, CX = 120, CY = 120;
 
@@ -52,7 +52,7 @@ WebServer server(80);
 enum App { APP_MENU, APP_GAME, APP_PAINT, APP_PHOTO, APP_CLOCK };
 App app = APP_MENU;
 
-// Renkler (RGB565)
+// Colours (RGB565)
 #define C_BG       0x0000
 #define C_DIM      0x2945
 #define C_RING     0x18E3
@@ -65,18 +65,18 @@ App app = APP_MENU;
 #define C_PLANET   0x2B7F
 #define C_LAND     0x2E68
 
-// Istatistikler (NVS'de saklanir)
+// Statistics (persisted in NVS)
 uint32_t bestScore = 0, gamesPlayed = 0, totalBlocks = 0;
 
-// Web'den gelen mesaj (toast)
+// Message received from the web panel (toast)
 char toastText[40] = "";
 uint32_t toastUntil = 0;
 
-// WiFi durumu
+// WiFi state
 bool wifiEnabled = false, netStarted = false;
 
 // ---------------------------------------------------------------------------
-// Yardimcilar
+// Helpers
 // ---------------------------------------------------------------------------
 static float angDiff(float a, float b) {
   float d = a - b;
@@ -85,7 +85,7 @@ static float angDiff(float a, float b) {
   return d;
 }
 
-// Matematik acisi (radyan, 0 = saat 3, saat yonunde) -> TFT_eSPI arc acisi (0 = saat 6)
+// Math angle (radians, 0 = 3 o'clock, clockwise) -> TFT_eSPI arc angle (0 = 6 o'clock)
 static uint32_t toArcDeg(float rad) {
   int d = (int)lroundf(rad * 180.0f / PI) - 90;
   d %= 360;
@@ -95,7 +95,7 @@ static uint32_t toArcDeg(float rad) {
 
 static float frand(float a, float b) { return a + (b - a) * (random(10000) / 10000.0f); }
 
-// UTF-8 Turkce karakterleri ASCII'ye cevir (dahili fontlar sadece ASCII)
+// Convert UTF-8 Turkish characters to ASCII (built-in fonts are ASCII only)
 static void toAsciiTR(const String &in, char *out, size_t outLen) {
   size_t o = 0;
   for (size_t i = 0; i < in.length() && o + 1 < outLen; i++) {
@@ -115,7 +115,7 @@ static void toAsciiTR(const String &in, char *out, size_t outLen) {
       if (d == 0x9F) r = 's'; else if (d == 0x9E) r = 'S';
     }
     if (r) out[o++] = r;
-    // cok baytli diger karakterleri atla
+    // skip any other multi-byte characters
     if (c >= 0xC0) { i++; if (c >= 0xE0) i++; if (c >= 0xF0) i++; }
   }
   out[o] = 0;
@@ -128,7 +128,7 @@ static void saveStats() {
 }
 
 // ---------------------------------------------------------------------------
-// Dokunmatik (CHSC6X, I2C 0x2E, INT = D7 aktif LOW)
+// Touch (CHSC6X, I2C 0x2E, INT = D7 active LOW)
 // ---------------------------------------------------------------------------
 struct TouchState {
   bool down = false, pressed = false, released = false;
@@ -147,7 +147,7 @@ static bool readTouchRaw(int16_t &x, int16_t &y) {
   uint8_t buf[5];
   if (Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)5) != 5) return false;
   Wire.readBytes(buf, 5);
-  if (buf[0] != 0x01) return false;  // 1 = parmak var
+  if (buf[0] != 0x01) return false;  // 1 = finger present
   x = buf[2];
   y = buf[4];
   return true;
@@ -162,7 +162,7 @@ static void updateTouch() {
     touch.y = y;
     physDown = true;
   } else if (physDown && now - lastTouchSeen > 60) {
-    physDown = false;  // kisa kesintileri yut (60 ms)
+    physDown = false;  // swallow short dropouts (60 ms)
   }
 
   bool down = physDown;
@@ -179,7 +179,7 @@ static float touchDist() { return hypotf(touch.x - CX, touch.y - CY); }
 static float touchAngle() { return atan2f(touch.y - CY, touch.x - CX); }
 
 // ---------------------------------------------------------------------------
-// Ortak cizimler
+// Shared drawing
 // ---------------------------------------------------------------------------
 struct Star { float a, r, spd; uint8_t b; };
 Star stars[70];
@@ -198,7 +198,7 @@ static void drawStars(float dt, float spin = 1.0f) {
     s.a += s.spd * dt * spin;
     int x = CX + cosf(s.a) * s.r, y = CY + sinf(s.a) * s.r;
     uint8_t b = s.b;
-    if (random(100) < 2) b = 255;  // parilti
+    if (random(100) < 2) b = 255;  // twinkle
     spr.drawPixel(x, y, spr.color565(b, b, b));
   }
 }
@@ -221,7 +221,7 @@ static void drawToast() {
 }
 
 // ---------------------------------------------------------------------------
-// Uygulama gecisleri
+// App switching
 // ---------------------------------------------------------------------------
 void enterMenu();
 void enterGame();
@@ -231,7 +231,7 @@ void enterPhoto();
 
 static void switchApp(App a) {
   app = a;
-  waitForRelease = true;  // onceki dokunus yeni ekranda tiklama sayilmasin
+  waitForRelease = true;  // don't let the previous touch count as a tap on the new screen
   switch (a) {
     case APP_MENU:  enterMenu();  break;
     case APP_GAME:  enterGame();  break;
@@ -304,7 +304,7 @@ void loopMenu(float dt) {
   spr.fillSprite(C_BG);
   drawStars(dt, 2.0f);
 
-  // Kenarda donen uydu
+  // Satellite orbiting the rim
   float sa = menuT * 0.8f;
   spr.drawCircle(CX, CY, 114, C_RING);
   spr.fillSmoothCircle(CX + cosf(sa) * 114, CY + sinf(sa) * 114, 4, C_CYAN, C_BG);
@@ -449,7 +449,7 @@ static void gameOver() {
 }
 
 static void updateGame(float dt) {
-  // --- Kalkan kontrolu ---
+  // --- Shield control ---
   if (touch.down && touchDist() > 12) {
     float target = touchAngle();
     shieldA += angDiff(target, shieldA) * min(1.0f, dt * 22.0f);
@@ -467,22 +467,22 @@ static void updateGame(float dt) {
     popup(CX, CY + 40, buf, C_CYAN);
   }
 
-  // --- Dogurma ---
+  // --- Spawning ---
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
     spawnMeteor();
-    if (level >= 5 && random(100) < 15) spawnMeteor();  // ikili dalga
+    if (level >= 5 && random(100) < 15) spawnMeteor();  // double wave
     spawnTimer = max(0.32f, 1.35f - level * 0.085f) * frand(0.7f, 1.2f);
   }
 
-  // --- Meteorlar ---
+  // --- Meteors ---
   for (auto &m : meteors) {
     if (!m.alive) continue;
     m.r -= m.spd * dt;
     float mx = CX + cosf(m.a) * m.r, my = CY + sinf(m.a) * m.r;
     uint16_t col = meteorColor(m.type);
 
-    // Kalkan bolgesi
+    // Shield zone
     if (!m.passed && m.r - m.size <= SHIELD_R + 3) {
       if (fabsf(angDiff(m.a, shieldA)) <= shieldHalf + 0.06f) {
         m.alive = false;
@@ -517,7 +517,7 @@ static void updateGame(float dt) {
       if (m.r < SHIELD_R - 4) m.passed = true;
     }
 
-    // Gezegene carpma
+    // Planet impact
     if (m.r <= PLANET_R + m.size) {
       m.alive = false;
       if (m.type == M_HEART) {
@@ -564,10 +564,10 @@ static void drawGame(float dt) {
   spr.fillSprite(hitFlash > 0 ? 0x3000 : C_BG);
   drawStars(dt, gs == GS_PLAY ? 1.0f + level * 0.4f : 1.0f);
 
-  // Kalkan yolu
+  // Shield track
   spr.drawCircle(cx, cy, SHIELD_R, C_RING);
 
-  // Gezegen
+  // Planet
   if (gs != GS_OVER) {
     uint16_t pc = hitFlash > 0 ? TFT_RED : C_PLANET;
     spr.fillSmoothCircle(cx, cy, PLANET_R + 3, 0x0849, C_BG);
@@ -579,7 +579,7 @@ static void drawGame(float dt) {
     }
   }
 
-  // Meteorlar
+  // Meteors
   for (auto &m : meteors) {
     if (!m.alive) continue;
     float ca = cosf(m.a), sa = sinf(m.a);
@@ -603,20 +603,20 @@ static void drawGame(float dt) {
     }
   }
 
-  // Kalkan
+  // Shield
   if (gs != GS_OVER) {
     uint16_t sc = wideTimer > 0 ? C_GOLD : C_SHIELD;
     spr.drawArc(cx, cy, SHIELD_R + 4, SHIELD_R - 3, toArcDeg(shieldA - shieldHalf),
                 toArcDeg(shieldA + shieldHalf), sc, C_BG, true);
   }
 
-  // Parcaciklar
+  // Particles
   for (auto &p : parts) {
     if (!p.alive) continue;
     spr.fillRect(p.x + ox, p.y + oy, 2, 2, p.col);
   }
 
-  // Popuplar
+  // Popups
   spr.setTextFont(2);
   spr.setTextDatum(MC_DATUM);
   for (auto &p : popups) {
@@ -707,13 +707,13 @@ void loopGame(float dt) {
 }
 
 // ---------------------------------------------------------------------------
-// CIZIM (dokunmatik test) - dogrudan ekrana cizer, sprite kullanmaz
+// PAINT (touch test) - draws straight to the display, no sprite
 // ---------------------------------------------------------------------------
 static const int PAL_SLOTS = 10;
 static const float PAL_R = 106, DRAW_R = 92;
 const uint16_t palColors[PAL_SLOTS] = {
-  0, TFT_RED, TFT_ORANGE, TFT_YELLOW, TFT_GREEN,   // 0 = temizle
-  0, C_CYAN, TFT_BLUE, TFT_MAGENTA, TFT_WHITE      // 5 = cikis
+  0, TFT_RED, TFT_ORANGE, TFT_YELLOW, TFT_GREEN,   // 0 = clear
+  0, C_CYAN, TFT_BLUE, TFT_MAGENTA, TFT_WHITE      // 5 = exit
 };
 int palSel = 9;
 bool paintHasLast = false;
@@ -760,7 +760,7 @@ void loopPaint() {
   if (d > DRAW_R + 4) {
     paintHasLast = false;
     if (!touch.pressed) return;
-    float a = touchAngle() + HALF_PI;  // slot 0 ustte
+    float a = touchAngle() + HALF_PI;  // slot 0 at the top
     while (a < 0) a += TWO_PI;
     int slot = (int)lroundf(a / (TWO_PI / PAL_SLOTS)) % PAL_SLOTS;
     if (slot == 0) clearCanvas();
@@ -781,27 +781,27 @@ void loopPaint() {
 }
 
 // ---------------------------------------------------------------------------
-// FOTOGRAF (internetten indirilen JPEG'ler, kaydirmali karusel)
+// PHOTO (JPEGs downloaded from the internet, swipeable carousel)
 // ---------------------------------------------------------------------------
 static const int MAX_PHOTOS = 16;
 static const size_t JPG_CAP = 120 * 1024;
 const int photoCount = min<int>(sizeof(PHOTO_URLS) / sizeof(PHOTO_URLS[0]), MAX_PHOTOS);
 
 enum PhotoState : uint8_t { PH_WAIT, PH_LOADING, PH_READY, PH_ERROR };
-uint16_t *photoBuf[MAX_PHOTOS];          // PSRAM'de 240x240 RGB565 (ekran bayt sirasinda)
+uint16_t *photoBuf[MAX_PHOTOS];          // 240x240 RGB565 in PSRAM (display byte order)
 volatile uint8_t photoState[MAX_PHOTOS];
 bool photoTaskStarted = false;
 
 int photoIdx = 0;
-float viewX = 0;                         // karuselin piksel cinsinden konumu
+float viewX = 0;                         // carousel position in pixels
 bool photoDragging = false;
 int16_t dragStartX, dragStartY, dragPrevX;
 uint32_t dragStartMs;
-float dragVel = 0;                       // px/s, birakinca "firlatma" icin
+float dragVel = 0;                       // px/s, for flick on release
 bool photoAuto = false;
 uint32_t photoAutoMs = 0, photoHintUntil = 0;
 
-// HTTPClient::writeToStream icin bellege yazan basit Stream
+// Minimal Stream that writes into memory, for HTTPClient::writeToStream
 class BufStream : public Stream {
  public:
   uint8_t *buf; size_t cap, len = 0;
@@ -833,7 +833,7 @@ static bool jpgToBuffer(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *
 
 static bool downloadPhoto(int i, uint8_t *jpg) {
   WiFiClientSecure client;
-  client.setInsecure();  // demo: sertifika dogrulamasi yok
+  client.setInsecure();  // demo: no certificate validation
   HTTPClient http;
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.setTimeout(15000);
@@ -867,10 +867,10 @@ static bool downloadPhoto(int i, uint8_t *jpg) {
   return res == JDR_OK;
 }
 
-// Indirme ayri bir gorevde (core 0) calisir; arayuz donmaz
+// Downloads run in a separate task (core 0) so the UI never freezes
 static void photoTask(void *) {
   uint8_t *jpg = (uint8_t *)ps_malloc(JPG_CAP);
-  TJpgDec.setSwapBytes(true);  // sprite bellegiyle ayni bayt sirasi
+  TJpgDec.setSwapBytes(true);  // same byte order as the sprite buffer
   TJpgDec.setCallback(jpgToBuffer);
   for (int pass = 0; pass < 3 && jpg; pass++) {
     bool anyFail = false;
@@ -894,7 +894,7 @@ void enterPhoto() {
   photoHintUntil = millis() + 3000;
 }
 
-// Bir fotoyu sprite'a sx konumundan kopyalar (yatay kirpma ile)
+// Copy a photo into the sprite at x = sx (with horizontal clipping)
 static void blitPhoto(int i, int sx) {
   int x0 = max(0, sx), x1 = min<int>(W, sx + W);
   if (x1 <= x0) return;
@@ -924,13 +924,13 @@ static void photoGoTo(int idx) {
 }
 
 void loopPhoto(float dt) {
-  // --- Gerekirse indirme gorevini baslat ---
+  // --- Start the download task if needed ---
   if (!photoTaskStarted && psramFound() && wifiEnabled && WiFi.status() == WL_CONNECTED) {
     photoTaskStarted = true;
     xTaskCreatePinnedToCore(photoTask, "photos", 16384, nullptr, 1, nullptr, 0);
   }
 
-  // --- Dokunmatik: kaydirma / dokunma / asagi cekme ---
+  // --- Touch: swipe / tap / pull down ---
   if (touch.pressed) {
     photoDragging = true;
     dragStartX = dragPrevX = touch.x;
@@ -944,7 +944,7 @@ void loopPhoto(float dt) {
     dragPrevX = touch.x;
     float x = photoIdx * W - dx;
     float maxX = (photoCount - 1) * W;
-    if (x < 0) x *= 0.35f;                        // uclarda lastik efekti
+    if (x < 0) x *= 0.35f;                        // rubber-band effect at the ends
     else if (x > maxX) x = maxX + (x - maxX) * 0.35f;
     viewX = x;
   }
@@ -953,25 +953,25 @@ void loopPhoto(float dt) {
     int dx = touch.x - dragStartX, dy = touch.y - dragStartY;
     if (dy > 70 && abs(dy) > abs(dx) * 2) { switchApp(APP_MENU); return; }
     if (abs(dx) < 10 && abs(dy) < 10 && millis() - dragStartMs < 350) {
-      photoAuto = !photoAuto;                     // dokun: otomatik oynat ac/kapa
+      photoAuto = !photoAuto;                     // tap: toggle slideshow
       photoAutoMs = millis();
     } else if (dx < -50 || dragVel < -500) photoGoTo(photoIdx + 1);
     else if (dx > 50 || dragVel > 500) photoGoTo(photoIdx - 1);
   }
 
-  // --- Otomatik slayt ---
+  // --- Slideshow ---
   if (photoAuto && !photoDragging && millis() - photoAutoMs > 4000) {
     photoGoTo((photoIdx + 1) % photoCount);
   }
 
-  // --- Animasyon ---
+  // --- Animation ---
   float target = photoIdx * W;
   if (!photoDragging) {
     viewX += (target - viewX) * min(1.0f, dt * 12.0f);
     if (fabsf(target - viewX) < 0.5f) viewX = target;
   }
 
-  // --- Cizim ---
+  // --- Drawing ---
   spr.fillSprite(C_BG);
   if (!psramFound()) {
     spr.setTextFont(2);
@@ -993,7 +993,7 @@ void loopPhoto(float dt) {
     }
   }
 
-  // Sayfa noktalari
+  // Page dots
   int dotsW = (photoCount - 1) * 11;
   for (int i = 0; i < photoCount; i++) {
     int x = CX - dotsW / 2 + i * 11;
@@ -1017,7 +1017,7 @@ void loopPhoto(float dt) {
 }
 
 // ---------------------------------------------------------------------------
-// SAAT
+// CLOCK
 // ---------------------------------------------------------------------------
 void enterClock() {}
 
@@ -1032,7 +1032,7 @@ void loopClock(float dt) {
   spr.fillSprite(C_BG);
   drawStars(dt, 0.5f);
 
-  // Kadran
+  // Dial
   for (int i = 0; i < 60; i++) {
     float a = i * TWO_PI / 60;
     bool big = i % 5 == 0;
@@ -1086,7 +1086,7 @@ void loopClock(float dt) {
 }
 
 // ---------------------------------------------------------------------------
-// Web paneli
+// Web panel
 // ---------------------------------------------------------------------------
 static const char PAGE[] PROGMEM = R"HTML(<!doctype html>
 <html lang="tr"><head><meta charset="utf-8">
@@ -1149,7 +1149,7 @@ static void handleNetwork() {
 }
 
 // ---------------------------------------------------------------------------
-// Kurulum ve ana dongu
+// Setup and main loop
 // ---------------------------------------------------------------------------
 static void splash() {
   for (int r = 0; r <= 120; r += 6) {
@@ -1168,13 +1168,13 @@ void setup() {
   delay(200);
   Serial.println("\nXIAO Arcade basliyor");
 
-  tft.init();  // Seeed_GFX: Wire.begin() ve TOUCH_INT pinini de hazirlar
+  tft.init();  // Seeed_GFX: also runs Wire.begin() and sets up the TOUCH_INT pin
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
   pinMode(TOUCH_INT, INPUT_PULLUP);
 
   spr.setColorDepth(16);
-  spr.setAttribute(PSRAM_ENABLE, false);  // hiz icin dahili RAM (115 KB)
+  spr.setAttribute(PSRAM_ENABLE, false);  // internal RAM for speed (115 KB)
   if (!spr.createSprite(W, H)) {
     spr.setAttribute(PSRAM_ENABLE, true);
     if (!spr.createSprite(W, H)) Serial.println("HATA: sprite olusturulamadi!");
@@ -1204,17 +1204,17 @@ void loop() {
   static uint32_t lastFrame = millis();
   handleNetwork();
 
-  if (app == APP_PAINT) {  // cizim: kare siniri yok, hizli ornekleme
+  if (app == APP_PAINT) {  // paint: no frame cap, fast sampling
     updateTouch();
     loopPaint();
     return;
   }
 
   uint32_t now = millis();
-  if (now - lastFrame < 16) return;  // ~60 FPS ust sinir
+  if (now - lastFrame < 16) return;  // ~60 FPS cap
   float dt = min((now - lastFrame) / 1000.0f, 0.05f);
   lastFrame = now;
-  updateTouch();  // kare basina bir kez: pressed/released olaylari kaybolmasin
+  updateTouch();  // once per frame so pressed/released events aren't lost
 
   switch (app) {
     case APP_MENU:  loopMenu(dt);  break;

@@ -1,3 +1,3 @@
 // XIAO ARCADE - Seeed XIAO ESP32S3 Sense + Seeed Round Display
-// Tum kod arcade.cpp icinde (Arduino IDE ayni klasordeki .cpp dosyalarini da derler).
-// WiFi ayarlari: config.h
+// All code lives in arcade.cpp (Arduino IDE also compiles .cpp files in the sketch folder).
+// WiFi settings: config.h
