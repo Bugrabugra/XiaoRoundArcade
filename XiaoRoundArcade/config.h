@@ -1,9 +1,16 @@
 #pragma once
 
 // ---- WiFi settings ----
-// Leave empty to run without WiFi (clock and web panel are disabled).
+// Credentials live in secrets.h, which is git-ignored. Create it by copying
+// secrets.example.h to secrets.h and filling in your network.
+// Without secrets.h the device runs offline (clock, photos and web panel disabled).
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef WIFI_SSID
 #define WIFI_SSID     ""
 #define WIFI_PASSWORD ""
+#endif
 
 // Reachable from a browser at http://xiao-arcade.local
 #define DEVICE_HOSTNAME "xiao-arcade"
