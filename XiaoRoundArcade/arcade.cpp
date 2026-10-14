@@ -246,10 +246,10 @@ static void switchApp(App a) {
 // ---------------------------------------------------------------------------
 struct Icon { int16_t x, y; const char *label; App target; };
 const Icon icons[4] = {
-  {45, 122, "OYUN", APP_GAME},
-  {95, 122, "CIZIM", APP_PAINT},
-  {145, 122, "FOTO", APP_PHOTO},
-  {195, 122, "SAAT", APP_CLOCK},
+  {45, 122, "GAME", APP_GAME},
+  {95, 122, "PAINT", APP_PAINT},
+  {145, 122, "PHOTO", APP_PHOTO},
+  {195, 122, "CLOCK", APP_CLOCK},
 };
 float menuT = 0;
 
@@ -315,7 +315,7 @@ void loopMenu(float dt) {
   spr.drawString("XIAO ARCADE", CX, 52);
   spr.setTextFont(2);
   spr.setTextColor(C_GOLD);
-  spr.drawString(String("Rekor: ") + bestScore, CX, 78);
+  spr.drawString(String("Best: ") + bestScore, CX, 78);
 
   for (auto &ic : icons) {
     bool hot = touch.down && hypotf(touch.x - ic.x, touch.y - ic.y) < 25;
@@ -333,7 +333,7 @@ void loopMenu(float dt) {
   spr.setTextFont(2);
   if (!wifiEnabled) {
     spr.setTextColor(C_DIM);
-    spr.drawString("WiFi kapali (config.h)", CX, 190);
+    spr.drawString("WiFi off (config.h)", CX, 190);
   } else if (WiFi.status() == WL_CONNECTED) {
     spr.setTextColor(TFT_GREEN);
     spr.drawString(WiFi.localIP().toString(), CX, 184);
@@ -341,7 +341,7 @@ void loopMenu(float dt) {
     spr.drawString(DEVICE_HOSTNAME ".local", CX, 201);
   } else {
     spr.setTextColor(TFT_ORANGE);
-    spr.drawString("WiFi baglaniyor...", CX, 190);
+    spr.drawString("Connecting WiFi...", CX, 190);
   }
 
   drawToast();
@@ -463,7 +463,7 @@ static void updateGame(float dt) {
   if (newLevel > level) {
     level = newLevel;
     char buf[12];
-    snprintf(buf, sizeof(buf), "SEVIYE %lu", (unsigned long)level);
+    snprintf(buf, sizeof(buf), "LEVEL %lu", (unsigned long)level);
     popup(CX, CY + 40, buf, C_CYAN);
   }
 
@@ -490,14 +490,14 @@ static void updateGame(float dt) {
         char buf[12];
         switch (m.type) {
           case M_HEART:
-            popup(mx, my, "kalp kirildi", C_HEART);
+            popup(mx, my, "heart broken", C_HEART);
             break;
           case M_GOLD: {
             combo++;
             uint32_t pts = 5 * multiplier();
             score += pts;
             wideTimer = 6.0f;
-            snprintf(buf, sizeof(buf), "+%lu GENIS", (unsigned long)pts);
+            snprintf(buf, sizeof(buf), "+%lu WIDE", (unsigned long)pts);
             popup(mx, my, buf, C_GOLD);
             totalBlocks++;
             break;
@@ -522,10 +522,10 @@ static void updateGame(float dt) {
       m.alive = false;
       if (m.type == M_HEART) {
         if (lives < MAX_LIVES) lives++;
-        popup(CX, CY - 30, "+1 CAN", C_HEART);
+        popup(CX, CY - 30, "+1 LIFE", C_HEART);
         burst(mx, my, C_HEART, 16, 80);
       } else if (m.type == M_GOLD) {
-        popup(CX, CY - 30, "kacti!", C_GOLD);
+        popup(CX, CY - 30, "missed!", C_GOLD);
       } else {
         lives--;
         combo = 0;
@@ -646,37 +646,37 @@ static void drawGame(float dt) {
     spr.drawString("ORBIT GUARD", CX, 42);
     spr.setTextFont(2);
     spr.setTextColor(TFT_WHITE);
-    spr.drawString("Dokun: kalkan o yone doner", CX, 172);
+    spr.drawString("Touch: shield turns there", CX, 172);
     spr.setTextColor(C_HEART);
-    spr.drawString("Yesil kalp: iceri birak", CX, 189);
+    spr.drawString("Green heart: let it in", CX, 189);
     spr.setTextColor(C_GOLD);
-    spr.drawString("Altin: yakala!", CX, 206);
+    spr.drawString("Gold: catch it!", CX, 206);
     if ((millis() / 500) % 2) {
       spr.setTextColor(TFT_WHITE);
-      spr.drawString("baslamak icin dokun", CX, 66);
+      spr.drawString("tap to start", CX, 66);
     }
   }
 
   if (gs == GS_OVER) {
     spr.setTextFont(4);
     spr.setTextColor(TFT_RED);
-    spr.drawString("OYUN BITTI", CX, 62);
+    spr.drawString("GAME OVER", CX, 62);
     spr.setTextColor(TFT_WHITE);
     spr.setTextFont(7);
     spr.drawNumber(score, CX, 110);
     spr.setTextFont(2);
     if (newRecord && (millis() / 300) % 2) {
       spr.setTextColor(C_GOLD);
-      spr.drawString("YENI REKOR!", CX, 145);
+      spr.drawString("NEW BEST!", CX, 145);
     } else if (!newRecord) {
       spr.setTextColor(C_DIM);
-      spr.drawString(String("Rekor: ") + bestScore, CX, 145);
+      spr.drawString(String("Best: ") + bestScore, CX, 145);
     }
     if (overTimer > 0.8f) {
       spr.fillRoundRect(42, 162, 74, 32, 16, 0x0400);
       spr.fillRoundRect(124, 162, 74, 32, 16, 0x2945);
       spr.setTextColor(TFT_WHITE);
-      spr.drawString("TEKRAR", 79, 178);
+      spr.drawString("AGAIN", 79, 178);
       spr.drawString("MENU", 161, 178);
     }
   }
@@ -840,7 +840,7 @@ static bool downloadPhoto(int i, uint8_t *jpg) {
   if (!http.begin(client, PHOTO_URLS[i])) return false;
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
-    Serial.printf("Foto %d: HTTP %d\n", i, code);
+    Serial.printf("Photo %d: HTTP %d\n", i, code);
     http.end();
     return false;
   }
@@ -848,7 +848,7 @@ static bool downloadPhoto(int i, uint8_t *jpg) {
   int n = http.writeToStream(&bs);
   http.end();
   if (n <= 0 || bs.len == 0) {
-    Serial.printf("Foto %d: indirme hatasi %d\n", i, n);
+    Serial.printf("Photo %d: download error %d\n", i, n);
     return false;
   }
 
@@ -863,7 +863,7 @@ static bool downloadPhoto(int i, uint8_t *jpg) {
   TJpgDec.setJpgScale(scale);
   decodeTarget = photoBuf[i];
   JRESULT res = TJpgDec.drawJpg((W - jw / scale) / 2, (H - jh / scale) / 2, jpg, bs.len);
-  Serial.printf("Foto %d: %u bayt, %ux%u, sonuc %d\n", i, (unsigned)bs.len, jw, jh, res);
+  Serial.printf("Photo %d: %u bytes, %ux%u, result %d\n", i, (unsigned)bs.len, jw, jh, res);
   return res == JDR_OK;
 }
 
@@ -909,12 +909,12 @@ static void blitPhoto(int i, int sx) {
   spr.setTextDatum(MC_DATUM);
   if (photoState[i] == PH_ERROR) {
     spr.setTextColor(TFT_RED);
-    spr.drawString("Yuklenemedi", cx, CY);
+    spr.drawString("Failed to load", cx, CY);
   } else {
     float a = millis() / 180.0f;
     spr.drawArc(cx, CY, 22, 18, toArcDeg(a), toArcDeg(a + 2.0f), C_CYAN, C_BG, true);
     spr.setTextColor(C_DIM);
-    spr.drawString(photoState[i] == PH_LOADING ? "Indiriliyor..." : "Sirada", cx, CY + 40);
+    spr.drawString(photoState[i] == PH_LOADING ? "Downloading..." : "Queued", cx, CY + 40);
   }
 }
 
@@ -977,14 +977,14 @@ void loopPhoto(float dt) {
     spr.setTextFont(2);
     spr.setTextDatum(MC_DATUM);
     spr.setTextColor(TFT_RED);
-    spr.drawString("PSRAM bulunamadi", CX, CY - 10);
+    spr.drawString("PSRAM not found", CX, CY - 10);
     spr.setTextColor(C_DIM);
     spr.drawString("Arduino IDE: PSRAM = OPI", CX, CY + 10);
   } else if (!wifiEnabled || (WiFi.status() != WL_CONNECTED && !photoTaskStarted)) {
     spr.setTextFont(2);
     spr.setTextDatum(MC_DATUM);
     spr.setTextColor(TFT_ORANGE);
-    spr.drawString(wifiEnabled ? "WiFi bekleniyor..." : "WiFi gerekli (config.h)", CX, CY);
+    spr.drawString(wifiEnabled ? "Waiting for WiFi..." : "WiFi required (config.h)", CX, CY);
   } else {
     int first = (int)floorf(viewX / W);
     for (int i = first; i <= first + 1; i++) {
@@ -1003,13 +1003,13 @@ void loopPhoto(float dt) {
   spr.setTextDatum(MC_DATUM);
   if (photoAuto) {
     spr.setTextColor(TFT_WHITE);
-    spr.drawString("OTO", CX, 16);
+    spr.drawString("AUTO", CX, 16);
   }
   if (millis() < photoHintUntil) {
     spr.fillRoundRect(35, 168, 170, 40, 12, 0x18E3);
     spr.setTextColor(TFT_WHITE);
-    spr.drawString("< kaydir >   dokun: oto", CX, 180);
-    spr.drawString("asagi cek: menu", CX, 196);
+    spr.drawString("< swipe >   tap: auto", CX, 180);
+    spr.drawString("pull down: menu", CX, 196);
   }
 
   drawToast();
@@ -1057,8 +1057,8 @@ void loopClock(float dt) {
   if (tmv.tm_year + 1900 < 2024) {
     spr.setTextFont(2);
     spr.setTextColor(TFT_ORANGE);
-    if (!wifiEnabled) spr.drawString("WiFi ayarlanmamis", CX, CY);
-    else spr.drawString("Saat aliniyor...", CX, CY);
+    if (!wifiEnabled) spr.drawString("WiFi not configured", CX, CY);
+    else spr.drawString("Syncing time...", CX, CY);
   } else {
     float sec = tmv.tm_sec + tv.tv_usec / 1e6f;
     float minF = tmv.tm_min + sec / 60.0f;
@@ -1069,7 +1069,7 @@ void loopClock(float dt) {
     spr.setTextColor(TFT_WHITE);
     strftime(buf, sizeof(buf), "%H:%M:%S", &tmv);
     spr.drawString(buf, CX, 80);
-    static const char *days[] = {"Pazar", "Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi"};
+    static const char *days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
     spr.setTextColor(C_DIM);
     snprintf(buf, sizeof(buf), "%02d.%02d.%04d", tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900);
     spr.drawString(buf, CX, 158);
@@ -1089,7 +1089,7 @@ void loopClock(float dt) {
 // Web panel
 // ---------------------------------------------------------------------------
 static const char PAGE[] PROGMEM = R"HTML(<!doctype html>
-<html lang="tr"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>XIAO Arcade</title>
 <style>
@@ -1099,13 +1099,13 @@ h1{color:#3ff;margin-bottom:4px}.card{background:#151c2e;border-radius:14px;padd
 button{margin-top:10px;padding:12px 18px;border:0;border-radius:10px;background:#3ff;color:#000;font-weight:700;font-size:16px}
 .muted{color:#8796b0}.danger{background:#f55;color:#fff}
 </style></head><body>
-<h1>XIAO Arcade</h1><div class="muted">Orbit Guard istatistikleri</div>
-<div class="card"><div class="muted">Rekor</div><div class="big" id="best">-</div>
-<div>Oynanan oyun: <b id="plays">-</b> &nbsp; Engellenen meteor: <b id="blocks">-</b></div></div>
-<div class="card"><b>Ekrana mesaj gonder</b>
-<input id="msg" maxlength="30" placeholder="Merhaba!">
-<button onclick="send()">Gonder</button></div>
-<div class="card"><button class="danger" onclick="if(confirm('Rekor sifirlansin mi?'))fetch('/reset',{method:'POST'}).then(load)">Rekoru sifirla</button></div>
+<h1>XIAO Arcade</h1><div class="muted">Orbit Guard stats</div>
+<div class="card"><div class="muted">High score</div><div class="big" id="best">-</div>
+<div>Games played: <b id="plays">-</b> &nbsp; Meteors blocked: <b id="blocks">-</b></div></div>
+<div class="card"><b>Send a message to the screen</b>
+<input id="msg" maxlength="30" placeholder="Hello!">
+<button onclick="send()">Send</button></div>
+<div class="card"><button class="danger" onclick="if(confirm('Reset the high score?'))fetch('/reset',{method:'POST'}).then(load)">Reset high score</button></div>
 <script>
 function load(){fetch('/api').then(r=>r.json()).then(j=>{best.textContent=j.best;plays.textContent=j.plays;blocks.textContent=j.blocks})}
 function send(){fetch('/msg',{method:'POST',body:new URLSearchParams({t:msg.value})});msg.value=''}
@@ -1123,7 +1123,7 @@ static void setupWeb() {
   server.on("/msg", HTTP_POST, [] {
     toAsciiTR(server.arg("t"), toastText, 27);
     toastUntil = millis() + 6000;
-    Serial.printf("Mesaj: %s\n", toastText);
+    Serial.printf("Message: %s\n", toastText);
     server.send(200, "text/plain", "ok");
   });
   server.on("/reset", HTTP_POST, [] {
@@ -1138,7 +1138,7 @@ static void handleNetwork() {
   if (!wifiEnabled) return;
   if (!netStarted && WiFi.status() == WL_CONNECTED) {
     netStarted = true;
-    Serial.printf("WiFi baglandi: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
     configTzTime(TZ_INFO, NTP_SERVER_1, NTP_SERVER_2);
     if (MDNS.begin(DEVICE_HOSTNAME)) MDNS.addService("http", "tcp", 80);
     setupWeb();
@@ -1166,7 +1166,7 @@ static void splash() {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\nXIAO Arcade basliyor");
+  Serial.println("\nXIAO Arcade starting");
 
   tft.init();  // Seeed_GFX: also runs Wire.begin() and sets up the TOUCH_INT pin
   tft.setRotation(0);
@@ -1177,7 +1177,7 @@ void setup() {
   spr.setAttribute(PSRAM_ENABLE, false);  // internal RAM for speed (115 KB)
   if (!spr.createSprite(W, H)) {
     spr.setAttribute(PSRAM_ENABLE, true);
-    if (!spr.createSprite(W, H)) Serial.println("HATA: sprite olusturulamadi!");
+    if (!spr.createSprite(W, H)) Serial.println("ERROR: could not create sprite!");
   }
 
   randomSeed(esp_random());
@@ -1188,7 +1188,7 @@ void setup() {
   gamesPlayed = prefs.getUInt("plays", 0);
   totalBlocks = prefs.getUInt("blocks", 0);
 
-  wifiEnabled = strlen(WIFI_SSID) > 0 && strcmp(WIFI_SSID, "WIFI_ADINIZ") != 0;
+  wifiEnabled = strlen(WIFI_SSID) > 0 && strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0;
   if (wifiEnabled) {
     WiFi.setHostname(DEVICE_HOSTNAME);
     WiFi.mode(WIFI_STA);
